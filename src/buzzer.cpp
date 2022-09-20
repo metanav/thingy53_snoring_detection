@@ -14,20 +14,21 @@ static bool sBuzzerState;
 
 int BuzzerInit()
 {
-	if (!device_is_ready(sBuzzer.dev)) {
-		return -ENODEV;
-	}
-	return 0;
+    if (!device_is_ready(sBuzzer.dev)) {
+	return -ENODEV;
+    }
+    return 0;
 }
 
 void BuzzerSetState(bool onOff)
 {
-	sBuzzerState = onOff;
-	//pwm_set_pulse_dt(&sBuzzer, sBuzzerState ? (sBuzzer.period / 2) : 0);
-	pwm_set_pulse_dt(&sBuzzer, sBuzzerState ? (sBuzzer.period / 2) : 0);
+    sBuzzerState = onOff;
+    //pwm_set_pulse_dt(&sBuzzer, sBuzzerState ? (sBuzzer.period / 2) : 0);
+    pwm_set_pulse_dt(&sBuzzer, sBuzzerState ? (sBuzzer.period / 2) : 0);
 }
 
 void BuzzerToggleState()
 {
-	BuzzerSetState(!sBuzzerState);
+    BuzzerSetState(!sBuzzerState);
 }
+

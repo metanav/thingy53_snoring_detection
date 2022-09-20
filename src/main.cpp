@@ -3,17 +3,12 @@
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "inference/ei_run_impulse.h"
 #include "sensors/ei_microphone.h"
-#include "buzzer.h"
 #include <drivers/uart.h>
 #include <logging/log.h>
 #include <nrfx_clock.h>
-#include <dk_buttons_and_leds.h>
 #include <zephyr.h>
 
 #define LOG_MODULE_NAME main
-#define LED_RED     DK_LED1
-#define LED_GREEN   DK_LED2
-#define LED_BLUE    DK_LED3
 
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
@@ -53,17 +48,6 @@ int main(void)
 
     dev->set_state(eiStateFinished);
 
-    int err = dk_leds_init();
-    if (err) {
-        LOG_ERR("Cannot init LEDs (err: %d)", err);
-    }
-
-    int ret = BuzzerInit();
-    if (ret) {
-        LOG_ERR("Buzzer init failed");
-    }
-    BuzzerSetState(false);
-
     // continuous=true, debug=false
     ei_start_impulse(true, false);
     dev->set_serial_channel(UART);
@@ -76,13 +60,6 @@ int main(void)
             ei_printf("Inferencing\n");
         }
         ei_sleep(1000);
-
-        //ei_sleep(2000);
-        //BuzzerToggleState();
-        //dk_set_led(LED_GREEN, 1); 
-        //ei_sleep(2000);
-        //BuzzerToggleState();
-        //dk_set_led(LED_GREEN, 0); 
     }
 }
 

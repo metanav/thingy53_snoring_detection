@@ -6,6 +6,18 @@
 #include "ble/ble_nus.h"
 #include "cJSON.h"
 #include <logging/log.h>
+#include <zephyr/sys/ring_buffer.h>
+#include "buzzer.h"
+#include <dk_buttons_and_leds.h>
+
+#define LED_RED     DK_LED1
+#define LED_GREEN   DK_LED2
+#define LED_BLUE    DK_LED3
+#define RING_BUF_SIZE 10
+
+uint8_t ring_buffer[RING_BUF_SIZE];
+struct ring_buf ringbuf;
+
 LOG_MODULE_REGISTER(run_impulse);
 
 typedef enum {
@@ -36,18 +48,52 @@ static inline inference_state_t set_thread_state(inference_state_t new_state)
 static void display_results(ei_impulse_result_t* result)
 {
     char *string = NULL;
+    static bool buzzer_on = false;
 
     if(dev->get_serial_channel() == UART) {
         ei_printf("==> Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
             result->timing.dsp, result->timing.classification, result->timing.anomaly);
+
         for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {            
-            ei_printf("    %s: [%0.2f]\r\n", result->classification[ix].label, 100*  result->classification[ix].value);
+            ei_printf("    %s: [%0.2f]\r\n", result->classification[ix].label, result->classification[ix].value);
+
+            uint8_t s_buf[1];
+
+            if (ring_buf_space_get(&ringbuf) == 0) {
+	        ring_buf_get(&ringbuf, s_buf, 1);
+            }
+
+            if (ix == 1 && !buzzer_on && result->classification[ix].value > 0.9) {
+                 s_buf[0] = ix;
+	         ring_buf_put(&ringbuf, s_buf, 1);
+
+                 uint8_t count = 0;
+
+                 uint8_t t_buf[RING_BUF_SIZE];
+	         int rb_len = ring_buf_peek(&ringbuf, t_buf, sizeof(t_buf));
+
+                 for (int i = 0; i < rb_len; i++) {
+                     count += t_buf[i];
+                     ei_printf("%d%s", t_buf[i], (i == rb_len-1) ? "\n" : ", ");
+                 }
+
+
+                 if (count >= 5) {
+                     ei_printf("Snoring\n");
+                     dk_set_led(LED_GREEN, 1); 
+                     buzzer_on = true;
+                     BuzzerSetState(buzzer_on);
+                 }
+             } else {
+                 s_buf[0] = ix;
+	         ring_buf_put(&ringbuf, s_buf, 1);
+                 //ei_printf("Noise\n");
+                 dk_set_led(LED_GREEN, 0); 
+                 buzzer_on = false;
+                 BuzzerSetState(buzzer_on);
+             }
         }
-#if EI_CLASSIFIER_HAS_ANOMALY == 1
-        ei_printf("    anomaly score: %f\r\n", result->anomaly);
-#endif
-    }
-    else {
+    } else {
         cJSON *response = cJSON_CreateObject();
         cJSON *results = NULL;
 
@@ -81,6 +127,19 @@ static void display_results(ei_impulse_result_t* result)
 
 void ei_inference_thread(void* param1, void* param2, void* param3)
 {
+    int err = dk_leds_init();
+    if (err) {
+        LOG_ERR("Cannot init LEDs (err: %d)", err);
+    }
+
+    int ret = BuzzerInit();
+    if (ret) {
+        LOG_ERR("Buzzer init failed");
+    }
+    BuzzerSetState(false);
+
+    ring_buf_init(&ringbuf, sizeof(ring_buffer), ring_buffer);
+
     while(1) {
         switch(state) {
             case INFERENCE_STOPPED:
